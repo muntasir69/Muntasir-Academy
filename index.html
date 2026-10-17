@@ -5792,9 +5792,9 @@ function closeModal(){ $$('.modal-bg').forEach(m => m.remove()); }
 function syllabusHTML(){
   const total = LEVELS.length, mins = LEVELS.reduce((a, l) => a + l.minutes, 0);
   return `<div class="syl">
-    <p class="muted" style="max-width:70ch">${WORLDS.length} worlds, ${total} levels, about ${Math.round(mins / 60 * 10) / 10} hours of lessons and hands-on practice, then a final exam. Start with Data Basics. After that, every other world opens, and your career path suggests the best order.</p>
+    <p class="muted" style="max-width:70ch">${WORLDS.length} worlds, ${total} levels, about ${Math.round(mins / 60 * 10) / 10} hours of lessons and hands-on practice, then a final exam. Start with the 5-minute Start Here mission and Data Basics. After that, every other world opens, and your career path suggests the best order.</p>
     ${WORLDS.map(w => `<section class="syl-world" style="--wc:${w.color}">
-      <div class="syl-head"><span class="world-tag" style="background:${w.soft};color:${w.color}">${esc(w.tool)}</span><h3>${esc(w.name)}</h3><span class="small muted">${w.levels.length} levels · about ${w.levels.reduce((a, l) => a + l.minutes, 0)} minutes · ${esc(w.blurb)}</span></div>
+      <div class="syl-head"><span class="world-tag" style="background:${w.soft};color:${w.color}">${esc(w.tool)}</span><h3>${esc(w.name)}</h3><span class="small muted">${w.levels.length} level${w.levels.length === 1 ? '' : 's'} · about ${w.levels.reduce((a, l) => a + l.minutes, 0)} minutes · ${esc(w.blurb)}</span></div>
       <div class="syl-row hd"><span>Level</span><span>Topic</span><span>What you learn</span><span>What you practise</span></div>
       ${w.levels.map((l, i) => `<div class="syl-row"><span class="n">${i + 1}</span><span><b>${esc(l.title)}</b><br><span class="small muted">${l.minutes} min · ${l.lesson.length} lesson${l.lesson.length > 1 ? 's' : ''} · ${l.tasks.length} task${l.tasks.length > 1 ? 's' : ''}</span></span><span>${esc(l.learn)}</span><span>${esc(l.practice)}</span></div>`).join('')}
     </section>`).join('')}
@@ -6034,6 +6034,7 @@ const SITE_URL = 'https://muntasir-academy.vercel.app/';
 const GOOGLE_CLIENT_ID = '';   // paste the OAuth Web client ID from Google Cloud to switch on "Sign in with Google"
 const REVIEW_ENDPOINT = 'https://formsubmit.co/ajax/muntasirmamun446@gmail.com';
 const REVIEW_EMAIL = 'muntasirmamun446@gmail.com';
+const REVIEW_SHEET_URL = 'https://script.google.com/macros/s/AKfycbwmf0MOhnIrGlbfbuckdRx8ViAXuHxTewqw_J5oMz_u-mowb1y-8lAYy8hrTC6k37cl/exec';   // paste the Google Apps Script "Web app" URL (ends in /exec) to save reviews to a Google Sheet and show approved ones live
 const REVIEWS = [
   // Approved reviews appear on the home page. Add them like this:
   // {name:'First name', path:'Data Analyst', rating:5, text:'What they wrote.', date:'2026-10'},
@@ -6062,7 +6063,17 @@ function mountGoogle(login){
 
 /* ---------- Reviews ---------- */
 const rvStarsHTML = n => `<span class="stars5" aria-label="${n} out of 5 stars">${[1,2,3,4,5].map(i => `<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 1.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L10 15l-5.2 2.7 1-5.9L1.5 7.7l5.9-.8z" fill="${i <= n ? 'var(--warn)' : 'var(--line)'}"/></svg>`).join('')}</span>`;
+let LIVE_REVIEWS = [], liveReviewsLoaded = false;
+function allReviews(){ return [...LIVE_REVIEWS, ...REVIEWS]; }
+function loadLiveReviews(){
+  if (!REVIEW_SHEET_URL || liveReviewsLoaded) return; liveReviewsLoaded = true;
+  fetch(REVIEW_SHEET_URL + (REVIEW_SHEET_URL.includes('?') ? '&' : '?') + 't=' + Date.now()).then(r => r.json()).then(d => {
+    LIVE_REVIEWS = (d.reviews || []).filter(r => r && r.name && r.text && r.rating >= 1 && r.rating <= 5).slice(0, 30).map(r => ({name:String(r.name), rating:Math.round(+r.rating), text:String(r.text), path:r.path ? String(r.path) : '', date:r.date ? String(r.date) : ''}));
+    const box = $('#reviews .lp-in'); if (box && LIVE_REVIEWS.length){ box.innerHTML = reviewsHTML(); $$('[data-review]', box).forEach(b => b.onclick = reviewModal); }
+  }).catch(() => { liveReviewsLoaded = false; });
+}
 function reviewsHTML(){
+  const REVIEWS = allReviews();
   const avg = REVIEWS.length ? REVIEWS.reduce((s, r) => s + r.rating, 0) / REVIEWS.length : 0;
   return `<div class="rv-head"><div class="stack" style="gap:6px"><span class="lbl">Reviews</span><h2>What learners say</h2>${REVIEWS.length ? `<div class="row small">${rvStarsHTML(Math.round(avg))}<b>${avg.toFixed(1)} / 5</b><span class="muted">from ${REVIEWS.length} review${REVIEWS.length > 1 ? 's' : ''}</span></div>` : ''}</div><button class="btn" data-review>Write a review</button></div>
     ${REVIEWS.length ? `<div class="rv-grid">${REVIEWS.map(r => `<figure class="rv"><div>${rvStarsHTML(r.rating)}</div><blockquote>${esc(r.text)}</blockquote><figcaption><b>${esc(r.name)}</b>${r.path ? ` · ${esc(r.path)}` : ''}${r.date ? ` · <span class="muted">${esc(r.date)}</span>` : ''}</figcaption></figure>`).join('')}</div>`
@@ -6094,7 +6105,9 @@ function reviewModal(){
         const btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
         const body = {_subject:`New Muntasir Academy review: ${r}/5 from ${name}`, _template:'table', _captcha:'false', rating:r + ' / 5', name, email:email || '(not given)', career_path:$('#rv-path', m).value || '(not given)', review:text, may_publish:$('#rv-ok', m).checked ? 'Yes' : 'No', sent_from:location.href};
         let ok = false;
+        const toSheet = REVIEW_SHEET_URL ? fetch(REVIEW_SHEET_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({rating:r, name, email, path:$('#rv-path', m).value, review:text, may_publish:$('#rv-ok', m).checked})}).then(() => true, () => false) : Promise.resolve(false);
         try { const res = await fetch(REVIEW_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json', Accept:'application/json'}, body:JSON.stringify(body)}); ok = res.ok; } catch(e){ ok = false; }
+        if (await toSheet) ok = true;
         const box = m.querySelector('.modal');
         if (ok){ Sound.ok(); box.innerHTML = `<div class="solhead" style="justify-content:center"><span class="solcheck" aria-hidden="true">✓</span><h2>Thank you!</h2></div><p class="muted">Your review was sent to the academy owner.</p><div class="row" style="justify-content:center"><button class="btn primary" data-x>Close</button></div>`; $$('[data-x]', box).forEach(b => b.onclick = closeModal); }
         else { box.innerHTML = `<h2>Couldn't send the review</h2><p class="muted">The review service didn't answer. Copy your review and email it to:</p><p><b class="mono" style="user-select:all">${esc(REVIEW_EMAIL)}</b></p><textarea rows="5" readonly style="width:100%">${esc(`${r}/5 – ${name}\n${text}`)}</textarea><div class="row" style="justify-content:center"><button class="btn" data-copy>Copy review</button><button class="btn primary" data-x>Close</button></div>`;
@@ -6160,6 +6173,7 @@ function renderAuth(){
   $$('[data-tab]').forEach(b => b.onclick = () => { state.authTab = b.dataset.tab; state.authErr = ''; renderAuth(); $('#auth').scrollIntoView({block:'nearest'}); });
   $$('[data-focusauth]').forEach(b => b.onclick = () => { $('#auth').scrollIntoView({behavior:'smooth', block:'center'}); setTimeout(() => ($('#au-name') || $('#au-user')).focus(), 350); });
   $$('[data-review]').forEach(b => b.onclick = reviewModal);
+  loadLiveReviews();
   const eye = $('[data-pw]'); eye.onclick = () => { const i = $('#au-pass'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.setAttribute('aria-pressed', String(show)); eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); };
   if (googleReady()) mountGoogle(login);
   const adm = $('#au-admin'); if (adm) adm.onchange = () => { state.authAdmin = adm.checked; $('#au-code-wrap').hidden = !adm.checked; $('form button[type=submit]').textContent = adm.checked ? 'Create admin account' : 'Create free account'; };
@@ -6249,7 +6263,7 @@ function pathViewHTML(){
     <section style="margin-top:22px" class="stack"><div><h2>Your learning plan</h2><p class="muted small" style="max-width:66ch">Follow the steps in order for the smoothest path. Each step explains why it matters. Optional steps add depth once the required ones are done. You can also open any topic from the "All topics" tab, or let "Surprise me" pick one.</p></div>
       <ol class="plan">${P.worlds.map((x, i) => { const w = WORLDS.find(v => v.id === x.id), wd = w.levels.filter(l => isDone(l.id)).length, nl = w.levels.find(l => !isDone(l.id) && unlocked(l)), locked = !['core','start'].includes(w.id) && !basicsDone && !isAdmin();
         return `<li class="step-card" style="--wc:${w.color};--ws:${w.soft}"><span class="step-n">${i + 1}</span><div class="stack" style="gap:8px;min-width:0;flex:1">
-          <div class="row" style="gap:8px"><h3>${esc(w.name)}</h3><span class="badge ${x.req ? 'ess' : ''}">${x.req ? 'Required' : 'Optional'}</span><span class="small muted">${w.levels.length} levels · about ${w.levels.reduce((a, l) => a + l.minutes, 0)} min</span></div>
+          <div class="row" style="gap:8px"><h3>${esc(w.name)}</h3><span class="badge ${x.req ? 'ess' : ''}">${x.req ? 'Required' : 'Optional'}</span><span class="small muted">${w.levels.length} level${w.levels.length === 1 ? '' : 's'} · about ${w.levels.reduce((a, l) => a + l.minutes, 0)} min</span></div>
           <p class="small"><b>Why:</b> ${esc(x.why)}</p><p class="small muted"><b>Covers:</b> ${esc(w.blurb)}</p>
           <div class="lvchips">${w.levels.map(l => `<button class="lvchip${isDone(l.id) ? ' done' : ''}" data-open="${l.id}" ${unlocked(l) ? '' : 'disabled'} title="${esc(l.learn)}">${isDone(l.id) ? '✓ ' : ''}${esc(l.title)}</button>`).join('')}</div>
           <div class="row"><div class="xpbar" style="width:160px"><span style="width:${wd / w.levels.length * 100}%;background:${w.color}"></span></div><span class="small muted">${wd}/${w.levels.length} done</span><span class="spacer"></span>${locked ? '<span class="small muted">Unlocks after Data Basics</span>' : nl ? `<button class="btn sm" data-open="${nl.id}">${wd ? 'Continue' : 'Start'}</button>` : '<span class="badge ok">Complete</span>'}</div>
